@@ -10,6 +10,8 @@ from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import httpx
+import asyncio
+from contextlib import asynccontextmanager
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -40,8 +42,19 @@ NIFTY50_SYMBOLS = [
 ]
 
 # External Indian Stock API configuration
-INDIAN_STOCK_API_BASE = "https://stock.indianapi.in"
-INDIAN_STOCK_API_KEY = os.environ.get('INDIAN_STOCK_API_KEY', '')
+# Using Yahoo Finance API (Free and fast) with Redundancy
+YAHOO_FINANCE_HOSTS = [
+    "https://query1.finance.yahoo.com",
+    "https://query2.finance.yahoo.com"
+]
+YAHOO_FINANCE_PATH = "/v8/finance/chart"
+
+# News API providers with fallback
+NEWS_API_ENDPOINTS = [
+    "https://saurav.tech/NewsAPI/categories/business/in.json",
+    "https://saurav.tech/NewsAPI/categories/general/in.json", # Fallback to general if business is down
+    "https://newsapi.org/v2/top-headlines?country=in&category=business&apiKey=" # Needs key but could be used
+]
 
 # Configure logging
 logging.basicConfig(
@@ -85,74 +98,141 @@ class StockHistoryPoint(BaseModel):
 # Cache for stock data to avoid repeated API calls
 stock_cache: Dict[str, Dict[str, Any]] = {}
 cache_timestamp: Dict[str, datetime] = {}
-CACHE_DURATION = 60  # seconds - cache for 1 minute to reduce API calls
+news_cache: Dict[str, Any] = {"news": [], "timestamp": None}
+CACHE_DURATION = 60  # seconds - cache for 1 minute
 
-# HTTP client for external API calls
-async def fetch_stock_data(symbol: str) -> Optional[Dict[str, Any]]:
-    """Fetch stock data from Indian Stock API"""
-    # Check cache first
-    if symbol in stock_cache:
-        cache_time = cache_timestamp.get(symbol)
-        if cache_time and (datetime.now(timezone.utc) - cache_time).seconds < CACHE_DURATION:
-            return stock_cache[symbol]
-    
+# Background task to refresh cache
+async def refresh_all_stocks_background():
+    """Periodically refresh all stocks in the background for zero-latency user access"""
+    while True:
+        try:
+            logger.info("⚡ Background Cache Refresh: Started")
+            semaphore = asyncio.Semaphore(5) # Up to 5 concurrent requests
+            
+            async def limited_fetch(symbol):
+                async with semaphore:
+                    data = await fetch_external_stock_data(symbol)
+                    if data:
+                        stock_cache[symbol] = data
+                        cache_timestamp[symbol] = datetime.now(timezone.utc)
+                    await asyncio.sleep(0.1) # Respect rate limits
+            
+            await asyncio.gather(*[limited_fetch(symbol) for symbol in NIFTY50_SYMBOLS])
+            
+            # Also refresh news
+            await refresh_news_background()
+            
+            logger.info("✅ Background Cache Refresh: Completed")
+        except Exception as e:
+            logger.error(f"❌ Background Cache error: {e}")
+        
+        await asyncio.sleep(60) # Refresh every minute
+
+async def refresh_news_background():
+    """Refresh news in the background"""
+    for endpoint in NEWS_API_ENDPOINTS:
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                actual_url = endpoint + os.environ.get("NEWS_API_KEY", "") if "newsapi.org" in endpoint else endpoint
+                response = await client.get(actual_url)
+                if response.status_code == 200:
+                    data = response.json()
+                    articles = data.get('articles', [])
+                    if articles:
+                        news_cache["news"] = articles[:20]
+                        news_cache["timestamp"] = datetime.now(timezone.utc).isoformat()
+                        return
+        except Exception:
+            continue
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start background task on startup
+    refresh_task = asyncio.create_task(refresh_all_stocks_background())
+    yield
+    # Cleanup
+    refresh_task.cancel()
     try:
-        headers = {"X-Api-Key": INDIAN_STOCK_API_KEY}
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(
-                f"{INDIAN_STOCK_API_BASE}/stock",
-                params={"name": symbol},
-                headers=headers
-            )
-            if response.status_code == 200:
-                data = response.json()
-                if data and 'currentPrice' in data:
-                    # Parse the API response
-                    nse_price = float(data.get('currentPrice', {}).get('NSE', '0').replace(',', ''))
-                    percent_change = float(data.get('percentChange', '0').replace(',', ''))
-                    year_high = float(data.get('yearHigh', '0').replace(',', '')) if data.get('yearHigh') else None
-                    year_low = float(data.get('yearLow', '0').replace(',', '')) if data.get('yearLow') else None
-                    
-                    # Calculate change amount
-                    change = nse_price * (percent_change / 100)
-                    previous_close = nse_price - change
-                    
-                    parsed_data = {
-                        "symbol": symbol,
-                        "name": data.get('companyName', symbol),
-                        "price": nse_price,
-                        "change": round(change, 2),
-                        "changePercent": percent_change,
-                        "open": previous_close,  # Approximate
-                        "high": nse_price * 1.01,  # Approximate
-                        "low": nse_price * 0.99,  # Approximate  
-                        "volume": 0,  # Not provided
-                        "previousClose": round(previous_close, 2),
-                        "fiftyTwoWeekHigh": year_high,
-                        "fiftyTwoWeekLow": year_low,
-                        "industry": data.get('industry', ''),
-                        "lastUpdated": datetime.now(timezone.utc).isoformat()
-                    }
-                    
-                    stock_cache[symbol] = parsed_data
-                    cache_timestamp[symbol] = datetime.now(timezone.utc)
-                    return parsed_data
-    except Exception as e:
-        logger.error(f"Error fetching stock {symbol}: {e}")
-    
+        await refresh_task
+    except asyncio.CancelledError:
+        pass
+    client.close()
+
+# Create the main app with lifespan management
+app = FastAPI(lifespan=lifespan)
+async def fetch_external_stock_data(symbol: str) -> Optional[Dict[str, Any]]:
+    """Internal helper to fetch data from external APIs"""
+    # Try multiple hosts in order
+    for host in YAHOO_FINANCE_HOSTS:
+        try:
+            ticker = f"{symbol}.NS"
+            async with httpx.AsyncClient(timeout=5.0) as client: # Fast timeout for background
+                response = await client.get(
+                    f"{host}{YAHOO_FINANCE_PATH}/{ticker}?interval=1d&range=1d"
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
+                        result = data['chart']['result'][0]
+                        meta = result.get('meta', {})
+                        
+                        price = meta.get('regularMarketPrice', 0)
+                        prev_close = meta.get('previousClose', price)
+                        
+                        change = price - prev_close
+                        change_percent = (change / prev_close) * 100 if prev_close else 0
+                        
+                        return {
+                            "symbol": symbol,
+                            "name": get_stock_name(symbol),
+                            "price": round(price, 2),
+                            "change": round(change, 2),
+                            "changePercent": round(change_percent, 2),
+                            "open": meta.get('regularMarketDayOpen', price),
+                            "high": meta.get('regularMarketDayHigh', price),
+                            "low": meta.get('regularMarketDayLow', price),
+                            "volume": result.get('indicators', {}).get('quote', [{}])[0].get('volume', [0])[0] or 0,
+                            "previousClose": round(prev_close, 2),
+                            "lastUpdated": datetime.now(timezone.utc).isoformat()
+                        }
+        except Exception:
+            continue
     return None
 
+async def fetch_stock_data(symbol: str) -> Optional[Dict[str, Any]]:
+    """Serve data from high-speed cache or fallback to mock instantly"""
+    # If in cache, return immediately
+    if symbol in stock_cache:
+        return stock_cache[symbol]
+    
+    # Otherwise, return mock data instantly so the UI never waits
+    return generate_mock_stock(symbol)
+
 async def fetch_stock_history(symbol: str) -> List[Dict[str, Any]]:
-    """Fetch historical data for sparkline charts"""
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(f"{NSE_API_BASE}/history?symbol={symbol}.NS&range=1mo")
-            if response.status_code == 200:
-                data = response.json()
-                if isinstance(data, list):
-                    return data[-30:]  # Last 30 data points
-    except Exception as e:
-        logger.error(f"Error fetching history for {symbol}: {e}")
+    """Fetch historical data for sparkline charts with redundancy"""
+    for host in YAHOO_FINANCE_HOSTS:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                ticker = f"{symbol}.NS"
+                response = await client.get(f"{host}{YAHOO_FINANCE_PATH}/{ticker}?interval=1d&range=1mo")
+                if response.status_code == 200:
+                    data = response.json()
+                    # Format history to match our model
+                    result = data['chart']['result'][0]
+                    timestamps = result['timestamp']
+                    prices = result['indicators']['adjclose'][0]['adjclose']
+                    
+                    history = []
+                    for t, p in zip(timestamps, prices):
+                        if p is not None:
+                            history.append({
+                                "date": datetime.fromtimestamp(t).strftime('%Y-%m-%d'),
+                                "price": round(p, 2)
+                            })
+                    return history[-30:] if history else []
+        except Exception as e:
+            logger.warning(f"Error fetching history for {symbol} from host {host}: {e}")
+            continue
     return []
 
 # Add your routes to the router
@@ -178,25 +258,13 @@ async def get_stock_quote(symbol: str):
 
 @api_router.get("/stocks")
 async def get_all_stocks():
-    """Get quotes for all NIFTY50 stocks"""
-    import asyncio
-    
-    async def get_stock_with_fallback(symbol: str) -> Dict[str, Any]:
-        data = await fetch_stock_data(symbol)
-        if data:
-            return data
-        return generate_mock_stock(symbol)
-    
-    # Fetch all stocks concurrently with a semaphore to limit concurrent requests
-    semaphore = asyncio.Semaphore(3)  # Limit to 3 concurrent requests to avoid rate limits
-    
-    async def limited_fetch(symbol: str):
-        async with semaphore:
-            result = await get_stock_with_fallback(symbol)
-            await asyncio.sleep(0.2)  # Small delay to avoid rate limiting
-            return result
-    
-    stocks = await asyncio.gather(*[limited_fetch(symbol) for symbol in NIFTY50_SYMBOLS])
+    """INSTANT Endpoint: Returns the entire cached NIFTY 50 list immediately"""
+    stocks = []
+    for symbol in NIFTY50_SYMBOLS:
+        if symbol in stock_cache:
+            stocks.append(stock_cache[symbol])
+        else:
+            stocks.append(generate_mock_stock(symbol))
     
     return {"stocks": list(stocks), "timestamp": datetime.now(timezone.utc).isoformat()}
 
@@ -240,6 +308,14 @@ async def get_stock_history(symbol: str):
     
     # Generate mock history if API fails
     return {"symbol": symbol.upper(), "history": generate_mock_history()}
+
+@api_router.get("/news")
+async def get_market_news():
+    """INSTANT Endpoint: Returns the cached headlines immediately"""
+    if news_cache["news"]:
+        return news_cache
+    
+    return {"news": [], "error": "News cache warming up..."}
 
 @api_router.get("/search")
 async def search_stocks(q: str = ""):

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { Search, RefreshCw, TrendingUp, TrendingDown, Clock, Activity } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,8 @@ import { toast } from "sonner";
 import StockCard from "@/components/StockCard";
 import AdBanner from "@/components/AdBanner";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = "http://localhost:8000"
+// console.log(process, 'process')
 const API = `${BACKEND_URL}/api`;
 
 const Dashboard = () => {
@@ -118,6 +119,15 @@ const Dashboard = () => {
                 </h1>
                 <p className="text-xs text-[#666666]">NIFTY 50 Live Tracker</p>
               </div>
+            
+            {/* Quick Links */}
+            <nav className="flex items-center gap-6 ml-4 hidden md:flex">
+              <Link to="/" className="text-sm font-medium text-white hover:text-[#00C805] transition-colors">Market</Link>
+              <Link to="/news" className="text-sm font-medium text-[#A0A0A0] hover:text-[#00C805] transition-colors flex items-center gap-2">
+                News
+                <Badge variant="secondary" className="scale-75 bg-[#007AFF]/10 text-[#007AFF] border-none font-bold">LIVE</Badge>
+              </Link>
+            </nav>
             </div>
 
             {/* Search Bar */}
