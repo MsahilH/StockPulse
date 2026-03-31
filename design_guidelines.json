@@ -1,0 +1,84 @@
+{
+  "theme": "dark",
+  "archetype": "2 (Performance Pro)",
+  "context": "DASHBOARDS & ADMIN PANELS",
+  "colors": {
+    "background": "#0A0A0A",
+    "surface_base": "#121212",
+    "surface_elevated": "#1E1E1E",
+    "border": "rgba(255, 255, 255, 0.1)",
+    "border_hover": "rgba(255, 255, 255, 0.2)",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#A0A0A0",
+    "text_muted": "#666666",
+    "accent_up": "#00C805",
+    "accent_down": "#FF3B30",
+    "accent_neutral": "#007AFF"
+  },
+  "typography": {
+    "headings": {
+      "font": "Manrope, sans-serif",
+      "weights": ["600", "700", "800"],
+      "styling": "tracking-tight"
+    },
+    "body": {
+      "font": "IBM Plex Sans, sans-serif",
+      "weights": ["400", "500", "600"],
+      "styling": "tracking-wide"
+    }
+  },
+  "layout_and_spacing": {
+    "strategy": "The Control Room Grid",
+    "container_padding": "p-6 md:p-8",
+    "grid_gaps": "gap-4 md:gap-6",
+    "radius": "rounded-lg (8px max to keep it sharp and technical)",
+    "alignment": "Strict grid hierarchy, dense and compact. Data-heavy areas should utilize every pixel effectively."
+  },
+  "surface_strategies": {
+    "cards": "Flat solid background (`bg-[#121212]`), sharp edges (`rounded-lg`), 1px solid stroke (`border border-white/10`). No drop shadows. Hover states should brighten border (`hover:border-white/20`) and slightly lift.",
+    "header": "Solid background with hard bottom border to separate from scrollable content.",
+    "ad_containers": "Subtle bordered container with a small 'Advertisement' overline. Image acts as a placeholder banner."
+  },
+  "components": {
+    "charts": "Use Recharts. Line charts for price trends. Hide axes and grid lines for mini-sparklines in grid cards; show detailed axes for expanded views.",
+    "search": "Shadcn UI Input with dark theme overrides. Left aligned icon.",
+    "grid": "Bento-style or strict 3-4 column grid for stock listings."
+  },
+  "images": {
+    "adsense_placeholders": [
+      {
+        "url": "https://images.pexels.com/photos/11194747/pexels-photo-11194747.jpeg",
+        "description": "Sleek dark luxury car banner - Use for Header or Horizontal Ad",
+        "category": "header_banner"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1633869699811-cd4f63049b36",
+        "description": "Dark premium watch close up - Use for Sidebar Ad",
+        "category": "sidebar_banner"
+      },
+      {
+        "url": "https://images.pexels.com/photos/10414975/pexels-photo-10414975.jpeg",
+        "description": "Luxury wristwatch metal band - Use for In-content Square Ad",
+        "category": "content_banner"
+      }
+    ]
+  },
+  "motion_and_interactions": {
+    "hover": "Crisp, instantaneous transitions. `transition-colors duration-200`",
+    "loading": "Use skeleton loaders with `animate-pulse` using `#1E1E1E` backgrounds.",
+    "price_flash": "Briefly flash green/red background on price update, fading out quickly."
+  },
+  "instructions_to_main_agent": [
+    "Inject Google Fonts for 'Manrope' and 'IBM Plex Sans' in index.html.",
+    "Configure Tailwind with the custom colors: background (#0A0A0A), surface (#121212), up (#00C805), down (#FF3B30).",
+    "Set global styles to apply Dark Theme (body bg to #0A0A0A, text to #FFFFFF).",
+    "Fetch Indian stock data from http://nse-api-khaki.vercel.app:5000 (Specifically NIFTY50 if possible, or build an array of NIFTY50 symbols to fetch).",
+    "Implement an auto-refresh mechanism every 30 seconds for live prices.",
+    "Create a 'Control Room' grid layout: A sidebar (with nav + sidebar ad), a main header (search + horizontal ad), and the main content area (stock grid).",
+    "In the stock grid, build dense cards for each stock showing symbol, current price, change %, and a Recharts mini line chart (sparkline) of recent trend.",
+    "Implement real-time search filtering on the stocks array.",
+    "Place the provided dummy AdSense placeholder images appropriately: header_banner at top, sidebar_banner in side panel, content_banner inserted in the grid flow.",
+    "Use Shadcn UI where applicable (Inputs, Dialogs) but strip 'Vercel-look' and apply the technical Performance Pro dark styles (1px borders, no shadows).",
+    "Ensure all interactive elements have 'data-testid' attributes."
+  ]
+}
