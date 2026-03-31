@@ -1,0 +1,15 @@
+services:
+  # The Backend Service (Stateless)
+  - type: web
+    name: stockpulse-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    region: singapore
+    plan: free
+    rootDirectory: backend
+    envVars:
+      - key: NEWS_API_KEY
+        sync: false # Set in Render dashboard (Optional)
+      - key: CORS_ORIGINS
+        value: "*" # Update with your Vercel URL later
