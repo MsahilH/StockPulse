@@ -1,34 +1,206 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
-}
-
-.App-header {
-    background-color: #0f0f10;
+/* Main Layout Styles */
+.dashboard-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    grid-template-rows: auto 1fr;
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
+    background-color: #0A0A0A;
+}
+
+.main-header {
+    grid-column: 1 / -1;
+    background-color: #121212;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 1rem 1.5rem;
+}
+
+.sidebar {
+    background-color: #121212;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 1.5rem;
+    overflow-y: auto;
+}
+
+.main-content {
+    padding: 1.5rem;
+    overflow-y: auto;
+    background-color: #0A0A0A;
+}
+
+/* Stock Card Styles */
+.stock-card {
+    background-color: #121212;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 1rem;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+    cursor: pointer;
+}
+
+.stock-card:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+/* Price colors */
+.price-up {
+    color: #00C805;
+}
+
+.price-down {
+    color: #FF3B30;
+}
+
+.price-neutral {
+    color: #A0A0A0;
+}
+
+/* Ad Container Styles */
+.ad-container {
+    background-color: #121212;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+}
+
+.ad-container::before {
+    content: 'Advertisement';
+    position: absolute;
+    top: 4px;
+    left: 8px;
+    font-size: 10px;
+    color: #666666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    z-index: 10;
+    background: rgba(18, 18, 18, 0.8);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.ad-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Search Input */
+.search-container {
+    position: relative;
+}
+
+.search-container input {
+    background-color: #1E1E1E;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     color: white;
+    padding: 0.75rem 1rem 0.75rem 2.5rem;
+    border-radius: 8px;
+    width: 100%;
+    transition: border-color 0.2s ease;
 }
 
-.App-link {
-    color: #61dafb;
+.search-container input:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
+.search-container input::placeholder {
+    color: #666666;
+}
+
+/* Grid layouts */
+.stock-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+/* Sparkline chart container */
+.sparkline-container {
+    height: 40px;
+    margin-top: 0.5rem;
+}
+
+/* Market Status Badge */
+.market-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.market-status.open {
+    background-color: rgba(0, 200, 5, 0.15);
+    color: #00C805;
+}
+
+.market-status.closed {
+    background-color: rgba(255, 59, 48, 0.15);
+    color: #FF3B30;
+}
+
+/* Loading skeleton */
+.loading-card {
+    background-color: #121212;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+    .dashboard-layout {
+        grid-template-columns: 1fr;
     }
-    to {
-        transform: rotate(360deg);
+    
+    .sidebar {
+        display: none;
     }
+}
+
+@media (max-width: 640px) {
+    .stock-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .main-header {
+        padding: 1rem;
+    }
+    
+    .main-content {
+        padding: 1rem;
+    }
+}
+
+/* Recharts overrides for dark theme */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+    stroke: rgba(255, 255, 255, 0.05);
+}
+
+.recharts-text {
+    fill: #666666;
+}
+
+/* Tooltip styles */
+.custom-tooltip {
+    background-color: #1E1E1E !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 8px;
+    padding: 0.75rem;
+}
+
+.custom-tooltip .label {
+    color: #A0A0A0;
+    font-size: 0.75rem;
+}
+
+.custom-tooltip .value {
+    color: #FFFFFF;
+    font-size: 0.875rem;
+    font-weight: 600;
 }
