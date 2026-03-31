@@ -60,7 +60,7 @@ const Dashboard = () => {
   useEffect(() => {
     fetchStocks();
     fetchMarketStatus();
-  }, []);
+  }, [fetchStocks, fetchMarketStatus]);
 
   // Auto-refresh every 30 seconds
   useEffect(() => {

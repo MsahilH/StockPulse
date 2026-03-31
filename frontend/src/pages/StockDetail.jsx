@@ -47,7 +47,7 @@ const StockDetail = () => {
 
   useEffect(() => {
     fetchStockData();
-  }, [symbol]);
+  }, [symbol, fetchStockData]);
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
