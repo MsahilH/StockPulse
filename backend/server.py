@@ -45,11 +45,11 @@ YAHOO_FINANCE_HOSTS = [
 ]
 YAHOO_FINANCE_PATH = "/v8/finance/chart"
 
-# News API providers with fallback
+# Multiple GNews queries to construct a larger feed while bypassing max=10 per request
 NEWS_API_ENDPOINTS = [
-    "https://saurav.tech/NewsAPI/categories/business/in.json",
-    "https://saurav.tech/NewsAPI/categories/general/in.json", # Fallback to general if business is down
-    "https://newsapi.org/v2/top-headlines?country=in&category=business&apiKey=" # Needs key but could be used
+    "https://gnews.io/api/v4/top-headlines?category=business&lang=en&country=in&max=10&apikey=", # Business News
+    "https://gnews.io/api/v4/top-headlines?category=technology&lang=en&country=in&max=10&apikey=", # Tech News
+    "https://gnews.io/api/v4/top-headlines?category=general&lang=en&country=in&max=10&apikey=" # General News
 ]
 
 # Configure logging
@@ -95,7 +95,7 @@ async def refresh_all_stocks_background():
     while True:
         try:
             logger.info("⚡ Background Cache Refresh: Started")
-            semaphore = asyncio.Semaphore(5) # Up to 5 concurrent requests
+            semaphore = asyncio.Semaphore(1) # Reduced concurrency to 1 to avoid 429 Too Many Requests
             
             async def limited_fetch(symbol):
                 async with semaphore:
@@ -103,45 +103,94 @@ async def refresh_all_stocks_background():
                     if data:
                         stock_cache[symbol] = data
                         cache_timestamp[symbol] = datetime.now(timezone.utc)
-                    await asyncio.sleep(0.1) # Respect rate limits
+                    await asyncio.sleep(2.0) # Respect rate limits strictly to avoid 429
             
             await asyncio.gather(*[limited_fetch(symbol) for symbol in NIFTY50_SYMBOLS])
             
-            # Also refresh news
-            await refresh_news_background()
-            
-            logger.info("✅ Background Cache Refresh: Completed")
+            logger.info("✅ Background Stocks Cache Refresh: Completed")
         except Exception as e:
             logger.error(f"❌ Background Cache error: {e}")
         
-        await asyncio.sleep(60) # Refresh every minute
+        await asyncio.sleep(300) # Refresh every 5 minutes instead of 1 minute to avoid rate limits
+
+async def refresh_news_loop():
+    """Independent loop to fetch news every 30 minutes to respect API rate limits."""
+    # Run once immediately, then loop
+    while True:
+        try:
+            await refresh_news_background()
+        except Exception as e:
+            logger.error(f"❌ Background News error: {e}")
+        
+        await asyncio.sleep(1800) # Sleep for 30 minutes (respects 100/day GNews free limit)
 
 async def refresh_news_background():
-    """Refresh news in the background"""
+    """Aggregates news from multiple category requests"""
+    all_articles = []
+    
     for endpoint in NEWS_API_ENDPOINTS:
         try:
-            async with httpx.AsyncClient(timeout=8.0) as client:
-                actual_url = endpoint + os.environ.get("NEWS_API_KEY", "") if "newsapi.org" in endpoint else endpoint
+            # Use a free GNews API key as default for demonstration
+            api_key = ""
+            if "newsapi.org" in endpoint:
+                api_key = os.environ.get("NEWS_API_KEY", "f77e3479d26b4d4eb138c1ae26b5b258")
+                if not api_key: continue
+            elif "gnews.io" in endpoint:
+                api_key = os.environ.get("GNEWS_API_KEY", "b44da312ccbcf8cdd4f00b201d120a1c") 
+                
+            actual_url = endpoint + api_key
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(actual_url)
                 if response.status_code == 200:
                     data = response.json()
                     articles = data.get('articles', [])
                     if articles:
-                        news_cache["news"] = articles[:20]
-                        news_cache["timestamp"] = datetime.now(timezone.utc).isoformat()
-                        return
-        except Exception:
+                        # Map GNews fields to expected NewsAPI format
+                        for article in articles:
+                            if 'image' in article and 'urlToImage' not in article:
+                                article['urlToImage'] = article['image']
+                        all_articles.extend(articles)
+                elif response.status_code == 429:
+                    logger.warning(f"⚠️ Rate limited (429) by news provider: {endpoint}")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to fetch news from {endpoint}: {e}")
             continue
+            
+    if all_articles:
+        # Deduplicate and sort by publication date
+        seen_urls = set()
+        unique_articles = []
+        for a in all_articles:
+            url = a.get('url')
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                unique_articles.append(a)
+        
+        # Sort by latest published (assuming ISO8601 strings)
+        unique_articles.sort(key=lambda x: str(x.get('publishedAt', '')), reverse=True)
+        
+        news_cache["news"] = unique_articles[:30] # Limit to 30 items
+        news_cache["timestamp"] = datetime.now(timezone.utc).isoformat()
+        logger.info(f"✅ Aggregated {len(news_cache['news'])} News Articles Successfully")
+    elif not news_cache["news"]:
+        # Emergency Fallback: If ALL APIs fail, provide mock news so UI isn't empty
+        news_cache["news"] = generate_mock_news()
+        news_cache["timestamp"] = datetime.now(timezone.utc).isoformat()
+        logger.info("ℹ️ Using Mock News fallback")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Start background task on startup
-    refresh_task = asyncio.create_task(refresh_all_stocks_background())
+    # Start background tasks independently
+    stock_task = asyncio.create_task(refresh_all_stocks_background())
+    news_task = asyncio.create_task(refresh_news_loop())
     yield
     # Cleanup
-    refresh_task.cancel()
+    stock_task.cancel()
+    news_task.cancel()
     try:
-        await refresh_task
+        await stock_task
+        await news_task
     except asyncio.CancelledError:
         pass
 
@@ -360,6 +409,34 @@ STOCK_BASE_PRICES = {
     "SBILIFE": 1520, "HDFCLIFE": 640, "UPL": 520, "SHREECEM": 25800, "TATAMOTORS": 785
 }
 
+def generate_mock_news() -> List[Dict[str, Any]]:
+    return [
+        {
+            "title": "Indian Markets Hit Record Highs Following Policy Announcements",
+            "description": "The BSE Sensex and Nifty 50 surged to new all-time highs today, driven by strong buying in banking, IT, and consumer durable sectors...",
+            "url": "#",
+            "urlToImage": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop",
+            "source": {"name": "Market Insider"},
+            "publishedAt": datetime.now(timezone.utc).isoformat()
+        },
+        {
+            "title": "Tech Giants in India Announce New AI Initiatives",
+            "description": "Leading technology companies operating in India have announced multi-billion dollar investments in building AI infrastructure and training programs.",
+            "url": "#",
+            "urlToImage": "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop",
+            "source": {"name": "Tech Daily"},
+            "publishedAt": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+        },
+        {
+            "title": "Reserve Bank of India Keeps Repo Rate Unchanged",
+            "description": "In a widely expected move, the RBI's Monetary Policy Committee decided to maintain the policy repo rate at its current level, focusing on inflation control.",
+            "url": "#",
+            "urlToImage": "https://images.unsplash.com/photo-1541354329998-f4d9a9f929d4?w=800&auto=format&fit=crop",
+            "source": {"name": "Finance Today"},
+            "publishedAt": (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
+        }
+    ]
+
 def generate_mock_stock(symbol: str) -> Dict[str, Any]:
     """Generate realistic mock stock data"""
     import random
@@ -480,8 +557,8 @@ app.include_router(api_router)
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_credentials=False,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

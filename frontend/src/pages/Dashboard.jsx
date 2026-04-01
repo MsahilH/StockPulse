@@ -178,6 +178,7 @@ const Dashboard = () => {
       <div className="container mx-auto px-4 md:px-6 py-4">
         <AdBanner
           type="header"
+          adSlot="5524130932"
           imageUrl="https://images.pexels.com/photos/11194747/pexels-photo-11194747.jpeg"
           data-testid="header-ad-banner"
         />
@@ -278,6 +279,7 @@ const Dashboard = () => {
                       <div className="col-span-1 sm:col-span-2 mt-4">
                         <AdBanner
                           type="content"
+                          adSlot="3220132308"
                           imageUrl="https://images.pexels.com/photos/10414975/pexels-photo-10414975.jpeg"
                           data-testid="content-ad-banner"
                         />
@@ -294,6 +296,7 @@ const Dashboard = () => {
             {/* Sidebar Ad */}
             <AdBanner
               type="sidebar"
+              adSlot="3220132308"
               imageUrl="https://images.unsplash.com/photo-1633869699811-cd4f63049b36"
               data-testid="sidebar-ad-banner"
             />
