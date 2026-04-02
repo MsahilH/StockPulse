@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import AdSensePlaceholder from "@/components/AdSensePlaceholder";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "https://stockpulse-uwym.onrender.com";
 const API = `${BACKEND_URL}/api`;
 
 const News = () => {

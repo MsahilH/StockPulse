@@ -11,8 +11,7 @@ import { toast } from "sonner";
 import StockCard from "@/components/StockCard";
 import AdBanner from "@/components/AdBanner";
 
-const BACKEND_URL = "http://localhost:8000"
-// console.log(process, 'process')
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "https://stockpulse-uwym.onrender.com";
 const API = `${BACKEND_URL}/api`;
 
 const Dashboard = () => {
