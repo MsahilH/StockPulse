@@ -4,7 +4,7 @@ services:
     name: stockpulse-backend
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    startCommand: python -m uvicorn server:app --host 0.0.0.0 --port $PORT
     region: singapore
     plan: free
     rootDirectory: backend
